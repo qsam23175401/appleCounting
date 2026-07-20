@@ -34,6 +34,9 @@
       width: fit-content;
       margin: 0 auto;
       padding: 1.5rem 1rem 2.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     header {
@@ -179,22 +182,30 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      margin-bottom: 1.25rem;
+      transition: width 0.2s ease;
+    }
+
+    .app.mode-single {
+      --orchard-w: 600px;
+    }
+
+    .app.mode-single .control-pane.green {
+      display: none;
+    }
+
+    .app.mode-single .control-row {
+      grid-template-columns: 1fr;
     }
 
     .orchard-header {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
+      text-align: center;
       padding: 0 0.25rem 0.5rem;
       font-size: 0.95rem;
       color: #4a6b2a;
       font-weight: 700;
       flex-shrink: 0;
     }
-
-    .orchard-header .left { text-align: left; color: var(--red); }
-    .orchard-header .mid { text-align: center; color: #4a6b2a; }
-    .orchard-header .right { text-align: right; color: var(--green); }
 
     .orchard-body {
       flex: 1;
@@ -210,16 +221,88 @@
       display: block;
     }
 
-    footer {
-      text-align: center;
-      margin-top: 1.25rem;
-      font-size: 0.85rem;
-      color: var(--muted);
+    .mode-card {
+      background: #fff;
+      border-radius: 24px;
+      padding: 0.9rem 1.25rem;
+      box-shadow: var(--shadow);
+      border: 3px solid #ffe0d4;
+      width: 1200px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
     }
+
+    .mode-options {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .mode-options .mode-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--muted);
+      margin-right: 0.25rem;
+    }
+
+    .mode-options label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      cursor: pointer;
+      padding: 0.4rem 0.85rem;
+      border-radius: 999px;
+      border: 2px solid #ffe0d4;
+      background: #fff8f4;
+      transition: background 0.12s, border-color 0.12s;
+    }
+
+    .mode-options label:has(input:checked) {
+      background: var(--red-soft);
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    .mode-options input {
+      accent-color: var(--red);
+      width: 1rem;
+      height: 1rem;
+      cursor: pointer;
+    }
+
+    .btn-random {
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 700;
+      padding: 0.45rem 0.95rem;
+      border: 2px solid #ffc9b8;
+      border-radius: 999px;
+      background: var(--accent-soft, #ffe4dc);
+      color: var(--red);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform 0.12s, background 0.12s;
+    }
+
+    .btn-random:hover {
+      background: #ffd4c8;
+      transform: translateY(-1px);
+    }
+
+    .btn-random:active {
+      transform: scale(0.96);
+    }
+
   </style>
 </head>
 <body>
-  <div class="app">
+  <div class="app mode-dual" id="app">
     <header>
       <h1>🍎 數一數小蘋果</h1>
       <p>拉動拉桿，看看數字和蘋果怎麼一起變化！</p>
@@ -274,60 +357,63 @@
     </section>
 
     <section class="orchard" aria-label="蘋果園">
-      <div class="orchard-header">
-        <span class="left" id="redLabel">紅蘋果 12</span>
-        <span class="mid">蘋果園</span>
-        <span class="right" id="greenLabel">青蘋果 27</span>
-      </div>
+      <div class="orchard-header">蘋果園</div>
       <div class="orchard-body" id="orchardBody"></div>
     </section>
 
-    <footer>左邊紅蘋果、右邊青蘋果；每五顆一組，十顆中間空隙較寬</footer>
+    <section class="mode-card" aria-label="模式設定">
+      <div class="mode-options">
+        <span class="mode-title">模式設定</span>
+        <label>
+          <input type="radio" name="appleMode" value="single" />
+          單蘋果模式
+        </label>
+        <label>
+          <input type="radio" name="appleMode" value="dual" checked />
+          雙蘋果模式
+        </label>
+      </div>
+      <button type="button" class="btn-random" id="btnRandom">隨機展示</button>
+    </section>
   </div>
 
   <script>
     const MAX = 100;
     const PER_ROW = 10;
     const GROUP = 5;
-
-    // Orchard drawable area (inside padding / header)
-    const VIEW_W = 1160;
     const VIEW_H = 570;
+    const VIEW_W_DUAL = 1160;
+    const VIEW_W_SINGLE = 560;
 
+    const app = document.getElementById("app");
     const redSlider = document.getElementById("redSlider");
     const greenSlider = document.getElementById("greenSlider");
     const redValue = document.getElementById("redValue");
     const greenValue = document.getElementById("greenValue");
-    const redLabel = document.getElementById("redLabel");
-    const greenLabel = document.getElementById("greenLabel");
     const orchardBody = document.getElementById("orchardBody");
+    const btnRandom = document.getElementById("btnRandom");
 
     let redCount = 12;
     let greenCount = 27;
+    let mode = "dual"; // "single" | "dual"
     let bumpTimers = { red: null, green: null };
 
     function applePath(cx, cy, scale, fill, leaf) {
-      const s = scale;
-      // Local apple drawn around (0,0) then translated; viewBox-ish 48x52
-      const body = `
-        <g transform="translate(${cx},${cy}) scale(${s})">
+      return `
+        <g transform="translate(${cx},${cy}) scale(${scale})">
           <ellipse cx="0" cy="4" rx="17" ry="18" fill="${fill}"/>
           <ellipse cx="-6" cy="0" rx="5" ry="6" fill="#fff" opacity="0.28"/>
           <path d="M0 -14 C0 -18 4 -21 8 -20" stroke="#6b4c2a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
           <ellipse cx="7" cy="-19" rx="7" ry="4" fill="${leaf}" transform="rotate(25 7 -19)"/>
         </g>
       `;
-      return body;
     }
 
-    /**
-     * Column x positions for one side (***** *****):
-     * 5 tight + wide gap + 5 tight
-     */
+    /** Column x positions: ***** ***** (5 tight + wide gap + 5 tight) */
     function sideColumnXs(sideLeft, sideWidth) {
       const appleUnit = 48;
       const tightGap = 6;
-      const wideGap = 28; // 特別寬的空白（十的中間）
+      const wideGap = 28;
       const groupWidth = GROUP * appleUnit + (GROUP - 1) * tightGap;
       const totalContent = groupWidth * 2 + wideGap;
       const startX = sideLeft + (sideWidth - totalContent) / 2 + appleUnit / 2;
@@ -345,48 +431,59 @@
     }
 
     function renderOrchard() {
-      const dividerX = VIEW_W / 2;
-      const leftW = dividerX - 20;
-      const rightW = VIEW_W - dividerX - 20;
-      const leftOrigin = 10;
-      const rightOrigin = dividerX + 10;
+      const isSingle = mode === "single";
+      const viewW = isSingle ? VIEW_W_SINGLE : VIEW_W_DUAL;
 
       const maxRows = Math.max(
         Math.ceil(redCount / PER_ROW) || 0,
-        Math.ceil(greenCount / PER_ROW) || 0,
+        isSingle ? 0 : Math.ceil(greenCount / PER_ROW) || 0,
         1
       );
 
       const rowPitch = Math.min(52, VIEW_H / Math.max(maxRows, 1));
       const scale = Math.min(0.9, (rowPitch * 0.78) / 40);
-
-      const leftXs = sideColumnXs(leftOrigin, leftW);
-      const rightXs = sideColumnXs(rightOrigin, rightW);
-
-      const parts = [];
-      parts.push(`<svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="紅蘋果 ${redCount}，青蘋果 ${greenCount}">`);
-
-      // Center divider
-      parts.push(`<line x1="${dividerX}" y1="8" x2="${dividerX}" y2="${VIEW_H - 8}" stroke="#6b8f3a" stroke-width="3" stroke-dasharray="8 6" opacity="0.55"/>`);
-      parts.push(`<text x="${dividerX}" y="${VIEW_H / 2}" text-anchor="middle" dominant-baseline="middle" fill="#4a6b2a" font-size="28" font-weight="800" opacity="0.45">|</text>`);
-
       const topPad = 28;
 
-      for (let row = 0; row < maxRows; row++) {
-        const cy = topPad + row * rowPitch + rowPitch / 2;
+      const parts = [];
+      const aria = isSingle
+        ? `紅蘋果 ${redCount}`
+        : `紅蘋果 ${redCount}，青蘋果 ${greenCount}`;
+      parts.push(`<svg viewBox="0 0 ${viewW} ${VIEW_H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${aria}">`);
 
-        // Red apples this row
-        const redStart = row * PER_ROW;
-        const redInRow = Math.max(0, Math.min(PER_ROW, redCount - redStart));
-        for (let i = 0; i < redInRow; i++) {
-          parts.push(applePath(leftXs[i], cy, scale, "#e84a3c", "#6abf3a"));
+      if (isSingle) {
+        const xs = sideColumnXs(10, viewW - 20);
+        for (let row = 0; row < maxRows; row++) {
+          const cy = topPad + row * rowPitch + rowPitch / 2;
+          const redStart = row * PER_ROW;
+          const redInRow = Math.max(0, Math.min(PER_ROW, redCount - redStart));
+          for (let i = 0; i < redInRow; i++) {
+            parts.push(applePath(xs[i], cy, scale, "#e84a3c", "#6abf3a"));
+          }
         }
+      } else {
+        const dividerX = viewW / 2;
+        const leftW = dividerX - 20;
+        const rightW = viewW - dividerX - 20;
+        const leftXs = sideColumnXs(10, leftW);
+        const rightXs = sideColumnXs(dividerX + 10, rightW);
 
-        // Green apples this row
-        const greenStart = row * PER_ROW;
-        const greenInRow = Math.max(0, Math.min(PER_ROW, greenCount - greenStart));
-        for (let i = 0; i < greenInRow; i++) {
-          parts.push(applePath(rightXs[i], cy, scale, "#7bc43a", "#4a9a22"));
+        parts.push(`<line x1="${dividerX}" y1="8" x2="${dividerX}" y2="${VIEW_H - 8}" stroke="#6b8f3a" stroke-width="3" stroke-dasharray="8 6" opacity="0.55"/>`);
+        parts.push(`<text x="${dividerX}" y="${VIEW_H / 2}" text-anchor="middle" dominant-baseline="middle" fill="#4a6b2a" font-size="28" font-weight="800" opacity="0.45">|</text>`);
+
+        for (let row = 0; row < maxRows; row++) {
+          const cy = topPad + row * rowPitch + rowPitch / 2;
+
+          const redStart = row * PER_ROW;
+          const redInRow = Math.max(0, Math.min(PER_ROW, redCount - redStart));
+          for (let i = 0; i < redInRow; i++) {
+            parts.push(applePath(leftXs[i], cy, scale, "#e84a3c", "#6abf3a"));
+          }
+
+          const greenStart = row * PER_ROW;
+          const greenInRow = Math.max(0, Math.min(PER_ROW, greenCount - greenStart));
+          for (let i = 0; i < greenInRow; i++) {
+            parts.push(applePath(rightXs[i], cy, scale, "#7bc43a", "#4a9a22"));
+          }
         }
       }
 
@@ -405,7 +502,6 @@
       redCount = n;
       redSlider.value = n;
       redValue.textContent = n;
-      redLabel.textContent = `紅蘋果 ${n}`;
       bump(redValue, "red");
       renderOrchard();
     }
@@ -415,14 +511,37 @@
       greenCount = n;
       greenSlider.value = n;
       greenValue.textContent = n;
-      greenLabel.textContent = `青蘋果 ${n}`;
       bump(greenValue, "green");
       renderOrchard();
     }
 
+    function setMode(next) {
+      mode = next === "single" ? "single" : "dual";
+      app.classList.toggle("mode-single", mode === "single");
+      app.classList.toggle("mode-dual", mode === "dual");
+      renderOrchard();
+    }
+
+    function randInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function randomShow() {
+      setRed(randInt(5, 97));
+      setGreen(randInt(5, 97));
+    }
+
     redSlider.addEventListener("input", () => setRed(redSlider.value));
     greenSlider.addEventListener("input", () => setGreen(greenSlider.value));
+    btnRandom.addEventListener("click", randomShow);
 
+    document.querySelectorAll('input[name="appleMode"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        if (radio.checked) setMode(radio.value);
+      });
+    });
+
+    setMode("dual");
     setRed(12);
     setGreen(27);
   </script>
