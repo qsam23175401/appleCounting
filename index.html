@@ -440,7 +440,9 @@
         : "";
 
       return `
-        <g${idAttr}${classAttr} transform="translate(${cx},${cy}) scale(${scale})">
+        <g${idAttr}${classAttr}
+           data-home-x="${cx}" data-home-y="${cy}" data-scale="${scale}"
+           transform="translate(${cx},${cy}) scale(${scale})">
           <ellipse cx="0" cy="4" rx="17" ry="18" fill="${fill}"/>
           <ellipse cx="-6" cy="0" rx="5" ry="6" fill="#fff" opacity="0.28"/>
           <path d="M0 -14 C0 -18 4 -21 8 -20" stroke="#6b4c2a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
@@ -523,7 +525,13 @@
           const redStart = row * PER_ROW;
           const redInRow = Math.max(0, Math.min(PER_ROW, redCount - redStart));
           for (let i = 0; i < redInRow; i++) {
-            parts.push(applePath(leftXs[i], cy, scale, "#e84a3c", "#6abf3a"));
+            const idx = redStart + i;
+            parts.push(
+              applePath(leftXs[i], cy, scale, "#e84a3c", "#6abf3a", {
+                id: `red-apple-${idx}`,
+                className: "red-apple",
+              })
+            );
           }
 
           const greenStart = row * PER_ROW;
@@ -602,6 +610,12 @@
       if (!el) return;
       const slash = el.querySelector(".slash");
       if (slash) slash.setAttribute("opacity", "1");
+      // 提到最上層，避免飛過來的紅蘋果蓋住紅線
+      el.parentNode.appendChild(el);
+    }
+
+    function bringToFront(el) {
+      if (el && el.parentNode) el.parentNode.appendChild(el);
     }
 
     function sleep(ms, token) {
@@ -610,37 +624,150 @@
       });
     }
 
+    function easeInOut(t) {
+      return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    }
+
+    function setAppleTransform(el, x, y, scale) {
+      el.setAttribute("transform", `translate(${x},${y}) scale(${scale})`);
+    }
+
+    function getAppleHome(el) {
+      return {
+        x: Number(el.dataset.homeX),
+        y: Number(el.dataset.homeY),
+        scale: Number(el.dataset.scale),
+      };
+    }
+
+    function getApplePos(el) {
+      const t = el.getAttribute("transform") || "";
+      const m = /translate\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/.exec(t);
+      const s = /scale\(\s*([-\d.]+)\s*\)/.exec(t);
+      if (!m) return getAppleHome(el);
+      return {
+        x: Number(m[1]),
+        y: Number(m[2]),
+        scale: s ? Number(s[1]) : Number(el.dataset.scale) || 1,
+      };
+    }
+
+    function animateAppleTo(el, toX, toY, duration, token) {
+      return new Promise((resolve) => {
+        const from = getApplePos(el);
+        const scale = Number(el.dataset.scale) || from.scale;
+        const start = performance.now();
+
+        function frame(now) {
+          if (token !== animToken) {
+            resolve(false);
+            return;
+          }
+          const t = Math.min(1, (now - start) / duration);
+          const e = easeInOut(t);
+          setAppleTransform(
+            el,
+            from.x + (toX - from.x) * e,
+            from.y + (toY - from.y) * e,
+            scale
+          );
+          if (t < 1) {
+            requestAnimationFrame(frame);
+          } else {
+            resolve(true);
+          }
+        }
+
+        requestAnimationFrame(frame);
+      });
+    }
+
+    async function flyGroupToTargets(pairs, duration, token) {
+      pairs.forEach(({ redEl }) => bringToFront(redEl));
+      const results = await Promise.all(
+        pairs.map(({ redEl, targetEl }) => {
+          const home = getAppleHome(targetEl);
+          return animateAppleTo(redEl, home.x, home.y, duration, token);
+        })
+      );
+      return results.every(Boolean) && token === animToken;
+    }
+
+    async function flyGroupHome(redEls, duration, token) {
+      const results = await Promise.all(
+        redEls.map((el) => {
+          const home = getAppleHome(el);
+          return animateAppleTo(el, home.x, home.y, duration, token);
+        })
+      );
+      return results.every(Boolean) && token === animToken;
+    }
+
+    // 約放慢 3 倍後的節奏
+    const FLY_MS = 1350;
+    const AFTER_SLASH_MS = 900;
+    const BETWEEN_ONES_MS = 350;
+
     async function playAnimation() {
       if (mode !== "dual") return;
 
-      // 重播：先清乾淨再演（數量不變時 renderOrchard 會取消舊動畫）
+      // 手動設成紅 > 綠時無法做減法對應
+      if (redCount > greenCount) {
+        window.confirm("紅蘋果比青蘋果多，無法播放減法動畫。\n請先把紅蘋果調成少於或等於青蘋果。");
+        return;
+      }
+
       renderOrchard();
       const token = ++animToken;
 
       const tensGroups = Math.floor(redCount / 10);
       const ones = redCount % 10;
 
-      // 1) 十位數：對應青蘋果上方「十個一數」整組劃掉
+      // 1) 十個一組：紅飛去對應綠 → 畫紅線 → 飛回
       for (let g = 0; g < tensGroups; g++) {
         if (token !== animToken) return;
-        const base = g * 10;
+
+        const pairs = [];
+        const redEls = [];
         for (let i = 0; i < 10; i++) {
-          if (base + i < greenCount) showSlash(base + i);
+          const idx = g * 10 + i;
+          const redEl = document.getElementById(`red-apple-${idx}`);
+          const greenEl = document.getElementById(`green-apple-${idx}`);
+          if (!redEl || !greenEl) continue;
+          redEls.push(redEl);
+          pairs.push({ redEl, targetEl: greenEl });
         }
-        const ok = await sleep(450, token);
-        if (!ok) return;
+
+        if (!(await flyGroupToTargets(pairs, FLY_MS, token))) return;
+
+        for (let i = 0; i < 10; i++) {
+          const idx = g * 10 + i;
+          if (idx < greenCount) showSlash(idx);
+        }
+
+        if (!(await sleep(AFTER_SLASH_MS, token))) return;
+        if (!(await flyGroupHome(redEls, FLY_MS, token))) return;
+        if (!(await sleep(BETWEEN_ONES_MS, token))) return;
       }
 
-      // 2) 個位數：從青蘋果最下方尾巴倒著一顆一顆劃掉
+      // 2) 個位：一顆一顆飛去尾巴對應的綠 → 畫紅線 → 飛回
       for (let k = 0; k < ones; k++) {
         if (token !== animToken) return;
-        const idx = greenCount - 1 - k;
-        if (idx >= 0) showSlash(idx);
-        const ok = await sleep(320, token);
-        if (!ok) return;
-      }
 
-      // 播完停住：不自動清除，等小朋友慢慢數剩下的青蘋果
+        const redIdx = tensGroups * 10 + k;
+        const greenIdx = greenCount - 1 - k;
+        const redEl = document.getElementById(`red-apple-${redIdx}`);
+        const greenEl = document.getElementById(`green-apple-${greenIdx}`);
+        if (!redEl || !greenEl) continue;
+
+        if (!(await flyGroupToTargets([{ redEl, targetEl: greenEl }], FLY_MS, token))) return;
+
+        showSlash(greenIdx);
+
+        if (!(await sleep(AFTER_SLASH_MS, token))) return;
+        if (!(await flyGroupHome([redEl], FLY_MS, token))) return;
+        if (!(await sleep(BETWEEN_ONES_MS, token))) return;
+      }
     }
 
     redSlider.addEventListener("input", () => setRed(redSlider.value));
