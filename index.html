@@ -276,7 +276,8 @@
       cursor: pointer;
     }
 
-    .btn-random {
+    .btn-random,
+    .btn-play {
       font-family: inherit;
       font-size: 0.9rem;
       font-weight: 700;
@@ -290,12 +291,37 @@
       transition: transform 0.12s, background 0.12s;
     }
 
-    .btn-random:hover {
-      background: #ffd4c8;
+    .btn-play {
+      border-color: #b8d4a0;
+      background: #eef8e0;
+      color: var(--green);
+    }
+
+    .mode-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .app.mode-single .btn-play {
+      display: none;
+    }
+
+    .btn-random:hover,
+    .btn-play:hover {
       transform: translateY(-1px);
     }
 
-    .btn-random:active {
+    .btn-random:hover {
+      background: #ffd4c8;
+    }
+
+    .btn-play:hover {
+      background: #e0f2c8;
+    }
+
+    .btn-random:active,
+    .btn-play:active {
       transform: scale(0.96);
     }
 
@@ -373,7 +399,10 @@
           雙蘋果模式
         </label>
       </div>
-      <button type="button" class="btn-random" id="btnRandom">隨機展示</button>
+      <div class="mode-actions">
+        <button type="button" class="btn-play" id="btnPlay">播放動畫</button>
+        <button type="button" class="btn-random" id="btnRandom">隨機展示</button>
+      </div>
     </section>
   </div>
 
@@ -392,6 +421,7 @@
     const greenValue = document.getElementById("greenValue");
     const orchardBody = document.getElementById("orchardBody");
     const btnRandom = document.getElementById("btnRandom");
+    const btnPlay = document.getElementById("btnPlay");
 
     let redCount = 12;
     let greenCount = 27;
@@ -527,13 +557,30 @@
     }
 
     function randomShow() {
+      if (mode === "dual") {
+        let red;
+        let green;
+        do {
+          red = randInt(4, 39);
+          green = randInt(28, 92);
+        } while (red > green);
+        setRed(red);
+        setGreen(green);
+        return;
+      }
+
       setRed(randInt(5, 97));
       setGreen(randInt(5, 97));
+    }
+
+    function playAnimation() {
+      // 減法動畫細節尚未決定，之後再實作
     }
 
     redSlider.addEventListener("input", () => setRed(redSlider.value));
     greenSlider.addEventListener("input", () => setGreen(greenSlider.value));
     btnRandom.addEventListener("click", randomShow);
+    btnPlay.addEventListener("click", playAnimation);
 
     document.querySelectorAll('input[name="appleMode"]').forEach((radio) => {
       radio.addEventListener("change", () => {
