@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>蘋果分組邏輯測試</title>
+  <style>
+    body {
+      font-family: Consolas, "Courier New", monospace;
+      padding: 1.5rem;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    h1 { color: #fff; font-family: sans-serif; }
+    .pass { color: #6a9955; }
+    .fail { color: #f14c4c; }
+    pre {
+      background: #252526;
+      padding: 1rem;
+      border-radius: 8px;
+      line-height: 1.35;
+      white-space: pre;
+    }
+    .summary { margin: 1rem 0; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <h1>蘋果園分組邏輯測試</h1>
+  <div class="summary" id="summary"></div>
+  <pre id="out"></pre>
+
+  <script>
+    const PER_ROW = 10;
+    const GROUP = 5;
+
+    /** 把一側數量轉成多行字串，例如 12 -> ["***** *****", "**"] */
+    function sideRows(count) {
+      const rows = [];
+      let left = count;
+      while (left > 0 || rows.length === 0) {
+        if (count === 0) {
+          rows.push("");
+          break;
+        }
+        const n = Math.min(PER_ROW, left);
+        left -= n;
+        const first = Math.min(GROUP, n);
+        const second = Math.max(0, n - GROUP);
+        let line = "*".repeat(first);
+        if (second > 0) line += " " + "*".repeat(second);
+        // 不足十但超過五：***** **
+        // 剛好十：***** *****
+        // 不足五：**
+        rows.push(line);
+        if (left <= 0) break;
+      }
+      return rows;
+    }
+
+    /** 合併左右側成對照字串 */
+    function orchardAscii(red, green) {
+      const rRows = sideRows(red);
+      const gRows = sideRows(green);
+      const maxR = Math.max(rRows.length, gRows.length);
+      const lines = [`${red} | ${green}:`];
+      for (let i = 0; i < maxR; i++) {
+        const L = rRows[i] ?? "";
+        const R = gRows[i] ?? "";
+        lines.push(`${L} | ${R}`);
+      }
+      return lines.join("\n");
+    }
+
+    const cases = [
+      {
+        name: "範例 12 | 27",
+        red: 12,
+        green: 27,
+        expect: [
+          "12 | 27:",
+          "***** ***** | ***** *****",
+          "** | ***** *****",
+          " | ***** **",
+        ].join("\n"),
+      },
+      {
+        name: "0 | 0",
+        red: 0,
+        green: 0,
+        expect: "0 | 0:\n | ",
+      },
+      {
+        name: "5 | 5",
+        red: 5,
+        green: 5,
+        expect: "5 | 5:\n***** | *****",
+      },
+      {
+        name: "10 | 10",
+        red: 10,
+        green: 10,
+        expect: "10 | 10:\n***** ***** | ***** *****",
+      },
+      {
+        name: "7 | 3",
+        red: 7,
+        green: 3,
+        expect: "7 | 3:\n***** ** | ***",
+      },
+      {
+        name: "100 | 1",
+        red: 100,
+        green: 1,
+        expect: (() => {
+          const lines = ["100 | 1:"];
+          for (let i = 0; i < 10; i++) {
+            lines.push(i === 0 ? "***** ***** | *" : "***** ***** | ");
+          }
+          return lines.join("\n");
+        })(),
+      },
+    ];
+
+    let passed = 0;
+    const blocks = [];
+
+    cases.forEach((c) => {
+      const got = orchardAscii(c.red, c.green);
+      const ok = got === c.expect;
+      if (ok) passed++;
+      blocks.push(
+        `${ok ? "[PASS]" : "[FAIL]"} ${c.name}\n` +
+          `--- got ---\n${got}\n` +
+          `--- expect ---\n${c.expect}\n`
+      );
+    });
+
+    document.getElementById("summary").innerHTML =
+      `<span class="${passed === cases.length ? "pass" : "fail"}">` +
+      `${passed} / ${cases.length} 通過</span>`;
+    document.getElementById("out").textContent = blocks.join("\n");
+  </script>
+</body>
+</html>
