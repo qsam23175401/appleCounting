@@ -400,7 +400,7 @@
         </label>
       </div>
       <div class="mode-actions">
-        <button type="button" class="btn-play" id="btnPlay">播放動畫</button>
+        <button type="button" class="btn-play" id="btnPlay">播放減法動畫</button>
         <button type="button" class="btn-random" id="btnRandom">隨機展示</button>
       </div>
     </section>
@@ -427,14 +427,25 @@
     let greenCount = 27;
     let mode = "dual"; // "single" | "dual"
     let bumpTimers = { red: null, green: null };
+    let animToken = 0;
 
-    function applePath(cx, cy, scale, fill, leaf) {
+    function applePath(cx, cy, scale, fill, leaf, opts = {}) {
+      const idAttr = opts.id ? ` id="${opts.id}"` : "";
+      const classAttr = opts.className ? ` class="${opts.className}"` : "";
+      const withSlash = Boolean(opts.withSlash);
+      const slash = withSlash
+        ? `<g class="slash" opacity="0">
+            <line x1="-16" y1="16" x2="16" y2="-12" stroke="#e84a3c" stroke-width="4.5" stroke-linecap="round"/>
+          </g>`
+        : "";
+
       return `
-        <g transform="translate(${cx},${cy}) scale(${scale})">
+        <g${idAttr}${classAttr} transform="translate(${cx},${cy}) scale(${scale})">
           <ellipse cx="0" cy="4" rx="17" ry="18" fill="${fill}"/>
           <ellipse cx="-6" cy="0" rx="5" ry="6" fill="#fff" opacity="0.28"/>
           <path d="M0 -14 C0 -18 4 -21 8 -20" stroke="#6b4c2a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
           <ellipse cx="7" cy="-19" rx="7" ry="4" fill="${leaf}" transform="rotate(25 7 -19)"/>
+          ${slash}
         </g>
       `;
     }
@@ -460,7 +471,13 @@
       return xs;
     }
 
+    function cancelAnimation() {
+      animToken += 1;
+    }
+
     function renderOrchard() {
+      cancelAnimation();
+
       const isSingle = mode === "single";
       const viewW = isSingle ? VIEW_W_SINGLE : VIEW_W_DUAL;
 
@@ -512,7 +529,14 @@
           const greenStart = row * PER_ROW;
           const greenInRow = Math.max(0, Math.min(PER_ROW, greenCount - greenStart));
           for (let i = 0; i < greenInRow; i++) {
-            parts.push(applePath(rightXs[i], cy, scale, "#7bc43a", "#4a9a22"));
+            const idx = greenStart + i;
+            parts.push(
+              applePath(rightXs[i], cy, scale, "#7bc43a", "#4a9a22", {
+                id: `green-apple-${idx}`,
+                className: "green-apple",
+                withSlash: true,
+              })
+            );
           }
         }
       }
@@ -573,8 +597,50 @@
       setGreen(randInt(5, 97));
     }
 
-    function playAnimation() {
-      // 減法動畫細節尚未決定，之後再實作
+    function showSlash(greenIndex) {
+      const el = document.getElementById(`green-apple-${greenIndex}`);
+      if (!el) return;
+      const slash = el.querySelector(".slash");
+      if (slash) slash.setAttribute("opacity", "1");
+    }
+
+    function sleep(ms, token) {
+      return new Promise((resolve) => {
+        setTimeout(() => resolve(token === animToken), ms);
+      });
+    }
+
+    async function playAnimation() {
+      if (mode !== "dual") return;
+
+      // 重播：先清乾淨再演（數量不變時 renderOrchard 會取消舊動畫）
+      renderOrchard();
+      const token = ++animToken;
+
+      const tensGroups = Math.floor(redCount / 10);
+      const ones = redCount % 10;
+
+      // 1) 十位數：對應青蘋果上方「十個一數」整組劃掉
+      for (let g = 0; g < tensGroups; g++) {
+        if (token !== animToken) return;
+        const base = g * 10;
+        for (let i = 0; i < 10; i++) {
+          if (base + i < greenCount) showSlash(base + i);
+        }
+        const ok = await sleep(450, token);
+        if (!ok) return;
+      }
+
+      // 2) 個位數：從青蘋果最下方尾巴倒著一顆一顆劃掉
+      for (let k = 0; k < ones; k++) {
+        if (token !== animToken) return;
+        const idx = greenCount - 1 - k;
+        if (idx >= 0) showSlash(idx);
+        const ok = await sleep(320, token);
+        if (!ok) return;
+      }
+
+      // 播完停住：不自動清除，等小朋友慢慢數剩下的青蘋果
     }
 
     redSlider.addEventListener("input", () => setRed(redSlider.value));
