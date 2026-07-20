@@ -90,19 +90,43 @@
       font-size: 1rem;
     }
 
-    /* 橫向全螢幕展示：把固定寬度介面縮放到視窗內 */
+    /* 橫向全螢幕展示：只縮放標題區以外的內容 */
     body.is-exhibit {
       overflow: hidden;
       background: linear-gradient(180deg, var(--sky) 0%, var(--bg) 45%, #fff5eb 100%);
     }
 
     body.is-exhibit .app {
+      width: 100%;
+      padding: 0;
+    }
+
+    body.is-exhibit header {
+      position: fixed;
+      top: 0.45rem;
+      right: 0.55rem;
+      z-index: 1100;
+      margin: 0;
+      text-align: right;
+    }
+
+    body.is-exhibit header h1,
+    body.is-exhibit header p {
+      display: none;
+    }
+
+    body.is-exhibit .title-row {
+      justify-content: flex-end;
+    }
+
+    body.is-exhibit .exhibit-stage {
       position: fixed;
       left: 50%;
       top: 50%;
-      margin: 0;
-      padding: 0.6rem 0.75rem;
       z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       transform-origin: center center;
       will-change: transform;
     }
@@ -110,6 +134,12 @@
     body.is-exhibit .btn-fullscreen {
       background: var(--red-soft);
       border-color: var(--red);
+    }
+
+    .exhibit-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     .control-card {
@@ -393,6 +423,7 @@
       <p>拉動拉桿，看看數字和蘋果怎麼一起變化！</p>
     </header>
 
+    <div class="exhibit-stage" id="exhibitStage">
     <section class="control-card">
       <div class="control-row">
         <div class="control-pane red">
@@ -463,6 +494,7 @@
         <button type="button" class="btn-random" id="btnRandom">隨機展示</button>
       </div>
     </section>
+    </div>
   </div>
 
   <script>
@@ -831,6 +863,7 @@
     }
 
     const btnFullscreen = document.getElementById("btnFullscreen");
+    const exhibitStage = document.getElementById("exhibitStage");
 
     function isNativeFullscreen() {
       return !!(
@@ -842,13 +875,13 @@
 
     function updateExhibitScale() {
       if (!document.body.classList.contains("is-exhibit")) return;
-      app.style.transform = "translate(-50%, -50%)";
+      exhibitStage.style.transform = "translate(-50%, -50%)";
       const pad = 12;
       const scale = Math.min(
-        (window.innerWidth - pad) / app.offsetWidth,
-        (window.innerHeight - pad) / app.offsetHeight
+        (window.innerWidth - pad) / exhibitStage.offsetWidth,
+        (window.innerHeight - pad) / exhibitStage.offsetHeight
       );
-      app.style.transform = `translate(-50%, -50%) scale(${Math.max(0.1, scale)})`;
+      exhibitStage.style.transform = `translate(-50%, -50%) scale(${Math.max(0.1, scale)})`;
     }
 
     async function lockLandscape() {
@@ -893,7 +926,7 @@
           requestAnimationFrame(updateExhibitScale);
         });
       } else {
-        app.style.transform = "";
+        exhibitStage.style.transform = "";
       }
     }
 
