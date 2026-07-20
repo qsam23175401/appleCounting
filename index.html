@@ -44,6 +44,14 @@
       margin-bottom: 1.25rem;
     }
 
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.65rem 0.85rem;
+    }
+
     header h1 {
       font-size: 2.2rem;
       font-weight: 800;
@@ -52,10 +60,56 @@
       letter-spacing: 0.04em;
     }
 
+    .btn-fullscreen {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 0.4rem 0.85rem;
+      border: 2px solid #ffc9b8;
+      border-radius: 999px;
+      background: #fff;
+      color: var(--red);
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(61, 44, 30, 0.08);
+      transition: transform 0.12s, background 0.12s;
+    }
+
+    .btn-fullscreen:hover {
+      background: var(--red-soft);
+      transform: translateY(-1px);
+    }
+
+    .btn-fullscreen:active {
+      transform: scale(0.96);
+    }
+
     header p {
       margin-top: 0.35rem;
       color: var(--muted);
       font-size: 1rem;
+    }
+
+    /* 橫向全螢幕展示：把固定寬度介面縮放到視窗內 */
+    body.is-exhibit {
+      overflow: hidden;
+      background: linear-gradient(180deg, var(--sky) 0%, var(--bg) 45%, #fff5eb 100%);
+    }
+
+    body.is-exhibit .app {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      margin: 0;
+      padding: 0.6rem 0.75rem;
+      z-index: 1000;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
+    body.is-exhibit .btn-fullscreen {
+      background: var(--red-soft);
+      border-color: var(--red);
     }
 
     .control-card {
@@ -330,7 +384,12 @@
 <body>
   <div class="app mode-dual" id="app">
     <header>
-      <h1>🍎 數一數小蘋果</h1>
+      <div class="title-row">
+        <h1>🍎 數一數小蘋果</h1>
+        <button type="button" class="btn-fullscreen" id="btnFullscreen" aria-pressed="false">
+          全螢幕（橫向）
+        </button>
+      </div>
       <p>拉動拉桿，看看數字和蘋果怎麼一起變化！</p>
     </header>
 
@@ -582,6 +641,7 @@
       app.classList.toggle("mode-single", mode === "single");
       app.classList.toggle("mode-dual", mode === "dual");
       renderOrchard();
+      requestAnimationFrame(updateExhibitScale);
     }
 
     function randInt(min, max) {
@@ -769,6 +829,120 @@
         if (!(await sleep(BETWEEN_ONES_MS, token))) return;
       }
     }
+
+    const btnFullscreen = document.getElementById("btnFullscreen");
+
+    function isNativeFullscreen() {
+      return !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.msFullscreenElement
+      );
+    }
+
+    function updateExhibitScale() {
+      if (!document.body.classList.contains("is-exhibit")) return;
+      app.style.transform = "translate(-50%, -50%)";
+      const pad = 12;
+      const scale = Math.min(
+        (window.innerWidth - pad) / app.offsetWidth,
+        (window.innerHeight - pad) / app.offsetHeight
+      );
+      app.style.transform = `translate(-50%, -50%) scale(${Math.max(0.1, scale)})`;
+    }
+
+    async function lockLandscape() {
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          await screen.orientation.lock("landscape");
+        }
+      } catch (_) {
+        /* 部分瀏覽器／直向鎖定裝置會失敗，改請使用者手動橫放 */
+      }
+    }
+
+    async function unlockOrientation() {
+      try {
+        if (screen.orientation && screen.orientation.unlock) {
+          screen.orientation.unlock();
+        }
+      } catch (_) {}
+    }
+
+    async function enterNativeFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+    }
+
+    async function exitNativeFullscreen() {
+      if (!isNativeFullscreen()) return;
+      if (document.exitFullscreen) await document.exitFullscreen();
+      else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+      else if (document.msExitFullscreen) await document.msExitFullscreen();
+    }
+
+    function setExhibitUi(on) {
+      document.body.classList.toggle("is-exhibit", on);
+      btnFullscreen.setAttribute("aria-pressed", on ? "true" : "false");
+      btnFullscreen.textContent = on ? "離開全螢幕" : "全螢幕（橫向）";
+      if (on) {
+        requestAnimationFrame(() => {
+          updateExhibitScale();
+          requestAnimationFrame(updateExhibitScale);
+        });
+      } else {
+        app.style.transform = "";
+      }
+    }
+
+    async function enterExhibit() {
+      setExhibitUi(true);
+      try {
+        await enterNativeFullscreen();
+      } catch (_) {
+        /* iOS 等不支援原生全螢幕時，仍用縮放展示 */
+      }
+      await lockLandscape();
+      updateExhibitScale();
+    }
+
+    async function exitExhibit() {
+      await unlockOrientation();
+      try {
+        await exitNativeFullscreen();
+      } catch (_) {}
+      setExhibitUi(false);
+    }
+
+    async function toggleExhibit() {
+      if (document.body.classList.contains("is-exhibit")) {
+        await exitExhibit();
+      } else {
+        await enterExhibit();
+      }
+    }
+
+    btnFullscreen.addEventListener("click", toggleExhibit);
+
+    document.addEventListener("fullscreenchange", () => {
+      if (!isNativeFullscreen() && document.body.classList.contains("is-exhibit")) {
+        setExhibitUi(false);
+        unlockOrientation();
+      }
+    });
+    document.addEventListener("webkitfullscreenchange", () => {
+      if (!isNativeFullscreen() && document.body.classList.contains("is-exhibit")) {
+        setExhibitUi(false);
+        unlockOrientation();
+      }
+    });
+
+    window.addEventListener("resize", updateExhibitScale);
+    window.addEventListener("orientationchange", () => {
+      setTimeout(updateExhibitScale, 200);
+    });
 
     redSlider.addEventListener("input", () => setRed(redSlider.value));
     greenSlider.addEventListener("input", () => setGreen(greenSlider.value));
