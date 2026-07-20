@@ -1,0 +1,18 @@
+{
+  "name": "數一數小蘋果",
+  "short_name": "數一數小蘋果",
+  "description": "協助對應數字與數量，並展示減法動畫",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fff8f0",
+  "theme_color": "#e84a3c",
+  "icons": [
+    {
+      "src": "apple-icon.webp",
+      "sizes": "512x512",
+      "type": "image/webp",
+      "purpose": "any maskable"
+    }
+  ]
+}
